@@ -9,13 +9,13 @@ import pyLDAvis.gensim_models
 import spacy
 from allennlp.predictors.predictor import Predictor
 from gensim.models import CoherenceModel
-
+import os
 import dataProcessing
 import relationExtraction
 import topicModelling
 
 """ Load Models """
-cf = Predictor.from_path("./coref-spanbert-large.tar.gz")
+cf = Predictor.from_path("./models/coref-spanbert-large.tar.gz")
 print("coref model loaded")
 
 sp = spacy.load("en_core_web_sm")
@@ -99,6 +99,9 @@ all_rels_df.to_csv('./out/cooccurences')
 relationExtraction.draw_kg(all_rels_df, './out/coocc', show_rels=False)
 
 ###########################################################################################################################
+output_path = './out/'
+if not os.path.exists(output_path):
+  os.makedirs(output_path)
 
 df_triples_m1 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.get_entity_triples, sp, ner_predictor)
 df_triples_m1.to_csv('./out/df_triples_m1')
