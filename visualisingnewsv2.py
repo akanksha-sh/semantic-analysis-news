@@ -9,10 +9,11 @@ import numpy as np
 import spacy
 from allennlp.predictors.predictor import Predictor
 from sklearn.preprocessing import normalize
-import pprint
+
 import dataProcessing
 import relationExtraction
 import topicModelling
+import clustering
 
 """ Load Models """
 cf = Predictor.from_path("./models/coref-spanbert-large.tar.gz")
@@ -54,14 +55,14 @@ def run():
     filtered_tokens = dataProcessing.get_filtered_tokens(coref_intros_filt, stopwords_sp)
 
     """ Word embeddings """
-    vectorized_intros = np.array(topicModelling.vectorize(filtered_tokens, model=word_embedding_model))
+    vectorized_intros = np.array(clustering.vectorize(filtered_tokens, model=word_embedding_model))
     print("vectorized intros")
 
     """ Get clusters """
     normalised_data = normalize(vectorized_intros, norm="l2")
-    tranformed_data = topicModelling.transform_data(normalised_data, 2)
-    k_labels, centroids, opt_cluster_no= topicModelling.optimal_cluster_number_kmeans(tranformed_data)
-    topicModelling.visualise_clusters(tranformed_data, k_labels, centroids)
+    tranformed_data = clustering.transform_data(normalised_data, 2)
+    k_labels, centroids, opt_cluster_no= clustering.optimal_cluster_number_kmeans(tranformed_data)
+    clustering.visualise_clusters(tranformed_data, k_labels, centroids)
     print("Optimal cluster number", opt_cluster_no)
 
 
@@ -70,7 +71,7 @@ def run():
     intro_groups = group.groupby(['k_clusters'])
 
     n_most_rep_docs=10
-    cluster_to_docs, filtered_tokens_clusters = topicModelling.get_cluster_docs(n_most_rep_docs, 
+    cluster_to_docs, filtered_tokens_clusters = clustering.get_cluster_docs(n_most_rep_docs, 
                                                                 filtered_tokens, 
                                                                 opt_cluster_no, 
                                                                 intro_groups, 
