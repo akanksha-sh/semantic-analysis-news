@@ -1,26 +1,32 @@
+from multiprocessing import freeze_support
 from sklearn.cluster import KMeans, SpectralClustering
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import normalize
 import matplotlib.pyplot as plt
 import numpy as np
 import gensim
 import gensim.corpora as corpora
-from gensim.models import CoherenceModel, Phrases, phrases, ldamodel, TfidfModel
+from gensim.models import CoherenceModel, LdaModel, TfidfModel, LdaMulticore
 import itertools
 import pandas as pd
+from math import sqrt
 
-"""## K-Means Clustering"""
+""" K-Means Clustering """
 def clustering_k_means(X, n_clusters): 
-  normalised_data = normalize(X, norm="l2")
   kmeans = KMeans(n_clusters=n_clusters, n_init=25, random_state=0)
-  kmeans.fit(X)
-
-  sil_score = silhouette_score(X, kmeans.labels_)
-  print("Cluster:" + str(n_clusters) + "sil_score" + str(sil_score))
-
-  return kmeans.labels_, kmeans.cluster_centers_, sil_score
-
+  labels  = kmeans.fit_predict(X)
+  sil_score = silhouette_score(X, labels)
+  return (labels, kmeans.cluster_centers_, sil_score)
+  
+def optimal_cluster_number_kmeans(X):
+  (n_d, n_v) = X.shape
+  # alt1: n/root n, alt 2: n//3 
+  n = int(n_d * n_v / sqrt(n_d))
+  print(n_d, n_v, n)
+  results = [clustering_k_means(X, i) for i in range(2, n)]
+  (l,c,s) = max(results,key=lambda item:item[2])
+  print(s)
+  return l, c, len(c)
 
 """Transform the data"""
 def transform_data(X, dim):
@@ -28,17 +34,15 @@ def transform_data(X, dim):
   transformed_data = pca.fit_transform(X)
   return transformed_data
 
-def visualise_clusters(X, n_clusters):
-  cluster_labels, centroids, _ = clustering_k_means(X, n_clusters)
-  plt.scatter(X[:, 0], X[:, 1], c=cluster_labels, alpha=0.5, s= 100)
-  plt.scatter(centroids[:, 0], centroids[:, 1], marker='X', s=20, color='red', edgecolor='black')
-  plt.show()
-  return cluster_labels, centroids
+def visualise_clusters(X, k_labels, centroids):
+  plt.scatter(X[:, 0], X[:, 1], c=k_labels, alpha=0.5, s=100)
+  plt.scatter(centroids[:, 0], centroids[:, 1], marker='X', s=20, color='black') 
+  plt.savefig("./out/clustering")
 
-
-""" Word2Vec"""
-def vectorize(list_of_docs, vector_size, model):
+""" Word embedding"""
+def vectorize(list_of_docs, model):
     features = []
+    vector_size = len(model['flight'])
 
     for tokens in list_of_docs:
         zero_vector = np.zeros(vector_size)
@@ -86,31 +90,68 @@ def get_cluster_docs(n_most_rep_docs, filtered_tokens, opt_cluster_no, intro_gro
 
 """Ngrams """
 
-# values change them when more data.
-
-def make_bigrams(token_clusters):
-  bigram = gensim.models.Phrases(token_clusters, min_count=3, threshold=4) 
+def make_bigrams(token_clusters, min_count=3, threshold=4):
+  bigram = gensim.models.Phrases(token_clusters, min_count, threshold) 
   bigram_model = gensim.models.phrases.Phraser(bigram)
   return [bigram_model[t] for t in token_clusters]
 
-# def make_trigrams(token_clusters):
-#     trigram = gensim.models.Phrases(bigram[token_clusters], threshold=4)  
-#     trigram_model = gensim.models.phrases.Phraser(trigram)
-#     return [trigram_model[bigram_model[t]] for t in token_clusters]
+def get_coherences(data_words, corpus_tfidf, lda_dictionary, n_topics):
+  lda_model = LdaModel(corpus=corpus_tfidf,
+                                        id2word=lda_dictionary, num_topics=n_topics,
+                                        random_state=100,
+                                        chunksize=5, minimum_probability = 0.1,
+                                        passes=15, alpha='asymmetric', per_word_topics=True)
+  
+  # Note umass for now otherwise it breaks !!!!!!!
+  coherence_model= CoherenceModel(model=lda_model, texts=data_words, dictionary=lda_dictionary, coherence='u_mass')
+  coherence_lda = coherence_model.get_coherence()
 
-def get_lda_params(data_words):
-  # Create Dictionary
+  return coherence_lda
+
+def topic_modelling(data_words ,max_topics=10):
   lda_dictionary = corpora.Dictionary(data_words) #just using bigrams for now
-
   # Term Document Frequency
   lda_corpus = [lda_dictionary.doc2bow(text) for text in data_words]
-
-  # # Create the TF-IDF model
+   # Create the TF-IDF model
   lda_tfidf = TfidfModel(lda_corpus)
   corpus_tfidf = lda_tfidf[lda_corpus]
+  
+  n_topics_coherence = np.array([get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(2, max_topics)])
+  print(n_topics_coherence)
+  # optimal_number_topics =  max(n_topics_coherence.items(), key= lambda x: x[1])[0]
+  optimal_number_topics = np.argmax(n_topics_coherence) + 2
+  print("Optimal number of topics", optimal_number_topics)
 
-  return lda_dictionary, corpus_tfidf
+  lda_model = LdaModel(corpus=corpus_tfidf,
+                        id2word=lda_dictionary, num_topics=4,
+                          random_state=100, update_every=1,
+                            chunksize=5, minimum_probability = 0.2,
+                              passes=15, alpha='auto', per_word_topics=True)
+  
+  return lda_model[corpus_tfidf], lda_model
 
+
+"""Topic name inference - tentative"""
+def check_invalid(kw_doc, sp, allowed_pos=['NOUN']):
+  doc = sp(kw_doc)
+  return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
+  
+def get_topic_name(keywords, sp, embedding_model): 
+  vecs = []
+  for kw in keywords:
+    kw = kw.replace('_', ' ')
+    if check_invalid(kw, sp):
+      continue
+    vecs.append([w for w in kw.split()])
+  
+  vecs = list(itertools.chain(*vecs))
+  print(vecs)
+  topic_names = embedding_model.most_similar_cosmul(positive=vecs, topn=8)
+  filtered_topic_names = [tn[0] for tn in topic_names if not check_invalid(tn[0], sp)]
+
+  return "TBD" if len(filtered_topic_names) == 0 else filtered_topic_names[0]
+
+""" Topic - cluster - doc mapping """
 def get_topic_cluster_mapping(doc_topics_dist, cluster_to_docs):
   cluster_topic_mapping = zip(cluster_to_docs.keys(), doc_topics_dist)
 
@@ -123,17 +164,21 @@ def get_topic_cluster_mapping(doc_topics_dist, cluster_to_docs):
   
   return topic_cluster_mapping
 
-def get_topic_doc_mapping(topic_cluster_mapping, lda_model, cluster_to_docs):
+def get_topic_doc_mapping(topic_cluster_mapping, lda_model, cluster_to_docs, sp, embedding_model):
   keywords = []
+  topics = []
   topics_to_docs = {}
+
   for t, cs in topic_cluster_mapping.items():
-      topic_keywords = ", ".join([w for w, p in lda_model.show_topic(t)])
+      topic_keywords = [w for w, _ in lda_model.show_topic(t)]
       keywords.append(topic_keywords)
+      topics.append(get_topic_name(topic_keywords, sp, embedding_model))
       docs = [cluster_to_docs.get(cid) for cid in cs]
       docs = list(itertools.chain(*docs))
-      print("T", t, "docs:", docs)
       topics_to_docs[t] = docs
 
   topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
+  topics_df['Topics'] = topics
   topics_df['Keywords'] = keywords
+
   return topics_df, topics_to_docs
