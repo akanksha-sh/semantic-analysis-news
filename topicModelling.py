@@ -95,8 +95,47 @@ def get_topic_doc_mapping(topic_cluster_mapping, lda_model, cluster_to_docs, sp,
       docs = list(itertools.chain(*docs))
       topics_to_docs[t] = docs
 
+
   topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
   topics_df['Topics'] = topics
   topics_df['Keywords'] = keywords
 
+  return topics_df, topics_to_docs
+
+  """Sentiment analysis"""
+
+def get_sentiment(a):
+  # label: 1 -> positive, 0->  negatice
+  if a >= 0.4 and a <= 0.6:
+    return "Neutral"
+  return "Positive" if a > 0.6 else "Negative"
+
+def get_doc_sentiments(docs, sent_predictor, data):
+  doc_sentiments = {}
+  for d in docs:
+      s = int(sent_predictor.predict(data['title'][d])['label'])
+      doc_sentiments[d] = s
+  return doc_sentiments
+
+def get_topic_doc_mapping(topic_cluster_mapping, doc_sentiments, lda_model, cluster_to_docs, sp, embedding_model):
+  keywords = []
+  topics = []
+  topic_sentiments = []
+  topics_to_docs = {}
+
+  for t, cs in topic_cluster_mapping.items():
+      topic_keywords = [w for w, _ in lda_model.show_topic(t)]
+      keywords.append(topic_keywords)
+      topics.append(get_topic_name(topic_keywords, sp, embedding_model))
+      docs = [cluster_to_docs.get(cid) for cid in cs]
+      docs = list(itertools.chain(*docs))
+      topics_to_docs[t] = docs
+      avg_sent = np.mean(np.array([doc_sentiments[d] for d in docs]))
+      topic_sentiments.append(get_sentiment(avg_sent))
+
+
+  topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
+  topics_df['Topics'] = topics
+  topics_df['Keywords'] = keywords
+  topics_df['Sentiment'] = topic_sentiments
   return topics_df, topics_to_docs

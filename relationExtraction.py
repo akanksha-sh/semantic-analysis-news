@@ -282,7 +282,7 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, function, *args):
 
   return df_triples
 
-def draw_kg(pairs, filename, show_rels=True):
+def draw_kg(pairs, method, file_suffix, show_rels=True):
   k_graph = nx.from_pandas_edgelist(pairs, 'subject', 'objects',create_using=nx.MultiDiGraph(), edge_attr='color')
   node_deg = nx.degree(k_graph)
   layout = nx.spring_layout(k_graph, k=1, iterations=60)
@@ -299,4 +299,4 @@ def draw_kg(pairs, filename, show_rels=True):
   if show_rels:
     labels = dict(zip(list(zip(pairs.subject, pairs.objects)),pairs['relation'].tolist()))
     nx.draw_networkx_edge_labels(k_graph, pos=layout, edge_labels=labels,font_color='black')
-  plt.savefig(filename)
+  plt.savefig('./out/kg-{0}-{1}'.format(method, file_suffix))

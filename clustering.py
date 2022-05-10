@@ -30,10 +30,10 @@ def transform_data(X, dim):
   transformed_data = pca.fit_transform(X)
   return transformed_data
 
-def visualise_clusters(X, k_labels, centroids):
+def visualise_clusters(X, k_labels, centroids, file_suffix):
   plt.scatter(X[:, 0], X[:, 1], c=k_labels, alpha=0.5, s=100)
   plt.scatter(centroids[:, 0], centroids[:, 1], marker='X', s=20, color='black') 
-  plt.savefig("./out/clustering")
+  plt.savefig('./out/clustering-{0}'.format(file_suffix))
 
 """ Word embedding"""
 def vectorize(list_of_docs, model):
@@ -67,6 +67,13 @@ def n_most_representative_for_cluster(n, t_data, cluster_id, groups, centroids):
 
     return group_indices[most_representative_indices]
 
+
+def get_n_param(cluster_member_counts):
+  n_range= cluster_member_counts.max() - cluster_member_counts.min()
+  print(n_range)
+  n_mean= int(cluster_member_counts.mean())
+  print(n_mean)
+  return min(n_range, n_mean)
 
 def get_cluster_docs(n_most_rep_docs, filtered_tokens, opt_cluster_no, intro_groups, transformed_data, k_centroids):
   """Get filtered tokens per cluster"""
