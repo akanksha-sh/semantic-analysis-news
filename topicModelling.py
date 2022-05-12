@@ -33,7 +33,8 @@ def topic_modelling(data_words ,max_topics=10):
    # Create the TF-IDF model
   lda_tfidf = TfidfModel(lda_corpus)
   corpus_tfidf = lda_tfidf[lda_corpus]
-  
+
+  'TODO: Should I be using tfidf at all'
   n_topics_coherence = np.array([get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(2, max_topics)])
   print(n_topics_coherence)
   # optimal_number_topics =  max(n_topics_coherence.items(), key= lambda x: x[1])[0]
