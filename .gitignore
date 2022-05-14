@@ -9,6 +9,7 @@ __pycache__/
 # Ignore folders  
 models/
 out/
+out_old/
 
 # Distribution / packaging
 .Python
