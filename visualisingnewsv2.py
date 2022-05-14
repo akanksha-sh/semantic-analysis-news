@@ -19,7 +19,29 @@ import relationExtraction
 import topicModelling
 import clustering
 import pandas as pd
-import dill as pickle
+import dill
+
+"""Load Data"""
+def dataloader():
+    output_path = './out/'
+    shutil.rmtree(output_path, ignore_errors=True)
+    os.makedirs(output_path)
+
+    data = pd.read_csv('airline.csv', parse_dates=[1])
+    data.columns = ['url', 'date', 'title', 'author', 'category', 'article']
+    data['date'] = data['date'].dt.normalize()
+
+    data['category'] = data['category'].fillna("Misc")
+    data_groups = data.groupby([data.date.dt.year, 'category'])
+    # print(data_groups['category'].value_counts())
+    mean_count = floor(data_groups['category'].value_counts().mean())
+    # print(mean_count)
+    filtered_data_groups = [data_groups.get_group(x) for x in data_groups.groups if len(data_groups.get_group(x)) > mean_count]
+
+    for dg in filtered_data_groups:
+        dg.reset_index(drop=True, inplace=True)
+    return filtered_data_groups
+
 
 """ Load Models """
 def load_models():
@@ -31,7 +53,7 @@ def load_models():
 
     word_embedding_model = api.load('glove-wiki-gigaword-50')
     print("word embedding model loaded")
-
+    
     ner_predictor = Predictor.from_path("./models/fine-grained-ner.tar.gz")
     print("ner model loaded")
 
@@ -40,7 +62,10 @@ def load_models():
     
     return cf, sp, word_embedding_model, ner_predictor, sentiment_predictor
 
-def run(cf, sp, word_embedding_model, ner_predictor, sentiment_predictor, input_group): 
+# def run(pickled_ner, input_group): 
+def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_group): 
+    print("Attempting to unpickle")
+    ner_predictor = dill.loads(pickled_ner)
 
     file_suffix = '{0}-{1}'.format(input_group.category[0], input_group.date[0].year)
 
@@ -86,10 +111,11 @@ def run(cf, sp, word_embedding_model, ner_predictor, sentiment_predictor, input_
                                                                 tranformed_data, 
                                                                 centroids)
     print(cluster_to_docs)
+
     docs = list(itertools.chain(*cluster_to_docs.values()))
     doc_sentiments = topicModelling.get_doc_sentiments(docs, sentiment_predictor, input_group)
     print(doc_sentiments)
-    
+
     """ LDA """
     data_words = topicModelling.make_bigrams(filtered_tokens_clusters)
 
@@ -121,27 +147,33 @@ def run(cf, sp, word_embedding_model, ner_predictor, sentiment_predictor, input_
 
 if __name__ == '__main__':
     cf, sp, wem, ner, sen = load_models()
-
-    output_path = './out/'
-    # if not os.path.exists(output_path)
-    shutil.rmtree(output_path, ignore_errors=True)
-    os.makedirs(output_path)
-
-    data = pd.read_csv('airline.csv', parse_dates=[1])
-    data.columns = ['url', 'date', 'title', 'author', 'category', 'article']
-    data['date'] = data['date'].dt.normalize()
-
-    counts = data['category'].value_counts()
-    mean_count = floor(counts.mean())
-    filtered_data= data[data['category'].groupby(data['category']).transform('size') > mean_count]
-    c = filtered_data.groupby([filtered_data.date.dt.year, 'category'])
-    data_groups = [c.get_group(x) for x in c.groups]
-    for dg in data_groups:
-        dg.reset_index(drop=True, inplace=True)
-
-    pool = Pool(processes=(cpu_count() - 1))
-    pool.map(partial(run, cf, sp, wem, ner, sen), data_groups)
+    pickled_ner = dill.dumps(ner, byref=True)
+    print(len(pickled_ner))
+    data_groups = dataloader()
+    pool = Pool(processes=(cpu_count()-1))
+    pool.map(partial(run, cf, sp, wem, pickled_ner, sen), data_groups[:1])
     pool.close()
+
+
+# def alt_data_loader():
+#     'Only filtered by category'
+
+#     output_path = './out/'
+#     shutil.rmtree(output_path, ignore_errors=True)
+#     os.makedirs(output_path)
+
+#     data = pd.read_csv('airline.csv', parse_dates=[1])
+#     data.columns = ['url', 'date', 'title', 'author', 'category', 'article']
+#     data['date'] = data['date'].dt.normalize()
+
+#     counts = data['category'].value_counts()
+#     mean_count = floor(counts.mean())
+#     filtered_data= data[data['category'].groupby(data['category']).transform('size') > mean_count]
+#     c = filtered_data.groupby([filtered_data.date.dt.year, 'category'])
+#     data_groups = [c.get_group(x) for x in c.groups]
+
+#     for dg in data_groups:
+#         dg.reset_index(drop=True, inplace=True)
 
 # def get_data_groups(data):
 #   counts = data['category'].value_counts()
@@ -159,3 +191,4 @@ if __name__ == '__main__':
 #       data_groups.append(cat_date_group)
 #       print(x, y, len(cat_date_group))
 #   return data_groups
+

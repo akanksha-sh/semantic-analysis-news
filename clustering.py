@@ -75,6 +75,8 @@ def get_n_param(cluster_member_counts):
   print(n_range)
   n_mean= int(cluster_member_counts.mean())
   print(n_mean)
+  'FIXME: This is wrong, maybe use std deviation '
+
   return min(n_range, n_mean)
 
 def get_cluster_docs(n_most_rep_docs, filtered_tokens, opt_cluster_no, intro_groups, transformed_data, k_centroids):

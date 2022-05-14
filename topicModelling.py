@@ -5,28 +5,26 @@ from gensim.models import CoherenceModel, LdaModel, TfidfModel
 import itertools
 import pandas as pd
 
-
 """Ngrams """
-
 def make_bigrams(token_clusters, min_count=3, threshold=4):
   bigram = gensim.models.Phrases(token_clusters, min_count, threshold) 
   bigram_model = gensim.models.phrases.Phraser(bigram)
   return [bigram_model[t] for t in token_clusters]
 
-def get_coherences(data_words, corpus_tfidf, lda_dictionary, n_topics):
-  lda_model = LdaModel(corpus=corpus_tfidf,
-                                        id2word=lda_dictionary, num_topics=n_topics,
+
+def get_coherences(data_words, data_corpus, lda_dictionary, n_topics):
+  lda_model = LdaModel(corpus=data_corpus, id2word=lda_dictionary, num_topics=n_topics,
                                         random_state=100,
-                                        chunksize=5, minimum_probability = 0.1,
-                                        passes=15, alpha='asymmetric', per_word_topics=True)
+                                        chunksize=5, minimum_probability = 0.3,
+                                        passes=20, alpha='asymmetric', per_word_topics=True)
   
   # Note umass for now otherwise it breaks !!!!!!!
-  coherence_model= CoherenceModel(model=lda_model, texts=data_words, dictionary=lda_dictionary, coherence='u_mass')
+  coherence_model= CoherenceModel(model=lda_model, texts=data_words, dictionary=lda_dictionary, coherence='c_v', processes=1)
   coherence_lda = coherence_model.get_coherence()
 
-  return coherence_lda
+  return (lda_model, coherence_lda)
 
-def topic_modelling(data_words ,max_topics=10):
+def topic_modelling(data_words, max_topics=10, min_topics=2):
   lda_dictionary = corpora.Dictionary(data_words) #just using bigrams for now
   # Term Document Frequency
   lda_corpus = [lda_dictionary.doc2bow(text) for text in data_words]
@@ -34,21 +32,15 @@ def topic_modelling(data_words ,max_topics=10):
   lda_tfidf = TfidfModel(lda_corpus)
   corpus_tfidf = lda_tfidf[lda_corpus]
 
-  'TODO: Should I be using tfidf at all'
-  n_topics_coherence = np.array([get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(2, max_topics)])
-  print(n_topics_coherence)
-  # optimal_number_topics =  max(n_topics_coherence.items(), key= lambda x: x[1])[0]
-  optimal_number_topics = np.argmax(n_topics_coherence) + 2
-  print("Optimal number of topics", optimal_number_topics)
-
-  lda_model = LdaModel(corpus=corpus_tfidf,
-                        id2word=lda_dictionary, num_topics=4,
-                          random_state=100, update_every=1,
-                            chunksize=5, minimum_probability = 0.2,
-                              passes=15, alpha='auto', per_word_topics=True)
+  n_topics_coherence = [get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(min_topics, max_topics)]
+  models, coherences = list(zip(*n_topics_coherence))
+  print(coherences)
+  i = np.argmax(np.array([coherences]))
+  lda_model = models[i]
+  print("Optimal number of topics", i+min_topics)
+  print("Lda coherence", coherences[i])
   
   return lda_model[corpus_tfidf], lda_model
-
 
 """Topic name inference - tentative"""
 def check_invalid(kw_doc, sp, allowed_pos=['NOUN']):
@@ -133,7 +125,6 @@ def get_topic_doc_mapping(topic_cluster_mapping, doc_sentiments, lda_model, clus
       topics_to_docs[t] = docs
       avg_sent = np.mean(np.array([doc_sentiments[d] for d in docs]))
       topic_sentiments.append(get_sentiment(avg_sent))
-
 
   topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
   topics_df['Topics'] = topics

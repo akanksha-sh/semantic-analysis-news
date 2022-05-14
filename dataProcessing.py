@@ -1,8 +1,6 @@
 from itertools import chain
 import allennlp
 import pandas as pd
-from allennlp.data.tokenizers.sentence_splitter import SpacySentenceSplitter
-from allennlp.data.tokenizers.spacy_tokenizer import SpacyTokenizerk
 import re
 
 def get_intros(articles, sp):
@@ -10,12 +8,13 @@ def get_intros(articles, sp):
   intro_sents = [list(map(lambda x: x.text, sp(a).sents))[:5] for a in articles]
   intros = list(map(' '.join, intro_sents))
   return intros
+'TODO: Add titles to intro'
 
 def clean_text(text):
   """Clean text by removing elipsis, dash between words"""
-  ctext = re.sub(r"…", "", ctext)
+  ctext = re.sub(r"…", "", text)
   ctext = re.sub(r"(?<=\w)-(?=\w)| --", " ", ctext)
-  ctext = re.sub(r"\s+", " ", text)
+  ctext = re.sub(r"\s+", " ", ctext)
 
   'TODO: Try removing punctuation'
   # """Replace punctuation and unwanted chars"""
