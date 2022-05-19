@@ -11,7 +11,7 @@ def make_bigrams(token_clusters, min_count=3, threshold=4):
   bigram_model = gensim.models.phrases.Phraser(bigram)
   return [bigram_model[t] for t in token_clusters]
 
-
+"""Optimal Topic Model"""
 def get_coherences(data_words, data_corpus, lda_dictionary, n_topics):
   lda_model = LdaModel(corpus=data_corpus, id2word=lda_dictionary, num_topics=n_topics,
                                         random_state=100,
@@ -42,61 +42,25 @@ def topic_modelling(data_words, max_topics=10, min_topics=2):
   
   return lda_model[corpus_tfidf], lda_model
 
-"""Topic name inference - tentative"""
-def check_invalid(kw_doc, sp, allowed_pos=['NOUN']):
-  doc = sp(kw_doc)
-  return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
+"""Topic name inference"""
+def check_invalid(kw_doc, sp, stopwords, model=None, model_check=False, allowed_pos=['NOUN']):
+  kw = list(sp(kw_doc))[0]
+  if model_check and kw.text not in model.vocab:
+    return True 
+  # return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
+  return kw.pos_ not in allowed_pos or kw.lemma_ in stopwords
   
-def get_topic_name(keywords, sp, embedding_model): 
-  vecs = []
-  for kw in keywords:
-    kw = kw.replace('_', ' ')
-    if check_invalid(kw, sp):
-      continue
-    vecs.append([w for w in kw.split()])
-  
-  vecs = list(itertools.chain(*vecs))
-  print(vecs)
-  topic_names = embedding_model.most_similar_cosmul(positive=vecs, topn=8)
-  filtered_topic_names = [tn[0] for tn in topic_names if not check_invalid(tn[0], sp)]
+def get_topic_name(keywords, sp, embedding_model, stopwords): 
+  'FIXME: improve ways to get this'
+  'TODO: Play around with different length of keywords '
+  words = list(itertools.chain(*[kw.split('_') for kw in keywords]))
+  fw = [w for w in words if not check_invalid(w,sp, stopwords, model=embedding_model, model_check=True)][:5]
+  topic_names = embedding_model.most_similar_cosmul(positive=fw, topn=3)
+  filtered_topic_names = [tn[0] for tn in topic_names if not check_invalid(tn[0], sp, stopwords)]
 
-  return "TBD" if len(filtered_topic_names) == 0 else filtered_topic_names[0]
+  return "TBD" if len(filtered_topic_names) == 0 else filtered_topic_names[0:3]
 
-""" Topic - cluster - doc mapping """
-def get_topic_cluster_mapping(doc_topics_dist, cluster_to_docs):
-  cluster_topic_mapping = zip(cluster_to_docs.keys(), doc_topics_dist)
-
-  # can add this to dataframe after removing rows with omitted clusters (which have less than min no of elements)
-  topic_cluster_mapping = {}
-  for cid, doc in cluster_topic_mapping:
-      """ Just picking one dominant topic"""
-      t = sorted(doc[0], key=lambda x: (x[1]), reverse=True)[0][0]
-      topic_cluster_mapping.setdefault(t, []).append(cid)
-  
-  return topic_cluster_mapping
-
-def get_topic_doc_mapping(topic_cluster_mapping, lda_model, cluster_to_docs, sp, embedding_model):
-  keywords = []
-  topics = []
-  topics_to_docs = {}
-
-  for t, cs in topic_cluster_mapping.items():
-      topic_keywords = [w for w, _ in lda_model.show_topic(t)]
-      keywords.append(topic_keywords)
-      topics.append(get_topic_name(topic_keywords, sp, embedding_model))
-      docs = [cluster_to_docs.get(cid) for cid in cs]
-      docs = list(itertools.chain(*docs))
-      topics_to_docs[t] = docs
-
-
-  topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
-  topics_df['Topics'] = topics
-  topics_df['Keywords'] = keywords
-
-  return topics_df, topics_to_docs
-
-  """Sentiment analysis"""
-
+"""Sentiment analysis"""
 def get_sentiment(a):
   # label: 1 -> positive, 0->  negatice
   if a >= 0.4 and a <= 0.6:
@@ -110,24 +74,28 @@ def get_doc_sentiments(docs, sent_predictor, data):
       doc_sentiments[d] = s
   return doc_sentiments
 
-def get_topic_doc_mapping(topic_cluster_mapping, doc_sentiments, lda_model, cluster_to_docs, sp, embedding_model):
-  keywords = []
-  topics = []
-  topic_sentiments = []
-  topics_to_docs = {}
+"""Get Topic Dataframe"""
+def get_topic_doc_mapping(cluster_id, doc_topics_dist, cluster_to_docs):
+  cluster_docs = cluster_to_docs[cluster_id]
+  topic_doc_mapping = {}
+  'TODO: Omit topics based on docs'
+  # Get main topic in each document
+  for i, row in enumerate(doc_topics_dist):
+      t = sorted(row[0], key=lambda x: (x[1]), reverse=True)[0][0]
+      topic_doc_mapping.setdefault(t, []).append(cluster_docs[i])
+  
+  return topic_doc_mapping
 
-  for t, cs in topic_cluster_mapping.items():
+def get_topic_dataframe(topic_doc_mapping, doc_sentiments, lda_model, sp, embedding_model, stopwords):
+  topics_data = []
+
+  for t, docs in topic_doc_mapping.items():
       topic_keywords = [w for w, _ in lda_model.show_topic(t)]
-      keywords.append(topic_keywords)
-      topics.append(get_topic_name(topic_keywords, sp, embedding_model))
-      docs = [cluster_to_docs.get(cid) for cid in cs]
-      docs = list(itertools.chain(*docs))
-      topics_to_docs[t] = docs
+      topic_name = get_topic_name(topic_keywords, sp, embedding_model, stopwords)
       avg_sent = np.mean(np.array([doc_sentiments[d] for d in docs]))
-      topic_sentiments.append(get_sentiment(avg_sent))
+      topic_sentiment = get_sentiment(avg_sent)
+      topics_data.append([t, topic_name, topic_keywords, docs, topic_sentiment])
 
-  topics_df = pd.DataFrame(list(topic_cluster_mapping.items()), columns = ['TopicId','Clusters'])
-  topics_df['Topics'] = topics
-  topics_df['Keywords'] = keywords
-  topics_df['Sentiment'] = topic_sentiments
-  return topics_df, topics_to_docs
+  topics_df = pd.DataFrame(topics_data, columns = ['TopicId','Topic Name', 'Keywords', 'Docs', 'Sentiment'])
+  topics_df.set_index('TopicId', inplace=True)
+  return topics_df

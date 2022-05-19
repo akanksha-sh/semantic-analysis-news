@@ -6,35 +6,13 @@ import itertools
 import spacy
 import pandas as pd
 from itertools import islice
-from dataProcessing import clean_text
+from dataProcessing import clean_text, get_entities
 
 def remove_stopwords(text, stopwords):
   str_stopwords = re.compile(r'\b(' + r'|'.join(stopwords) + r')\b\s*')
   c = re.sub(str_stopwords, ' ', text)
   c = re.sub(r"\s+", " ", c)
   return c
-
-def get_entities(result):
-  entities = set()
-  ignore_types = ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY']
-  for word, tag in zip(result["words"], result["tags"]):
-      if tag == "O":
-        continue
-      ent_position, ent_type = tag.split("-")
-      if ent_type in ignore_types:
-        continue
-      if ent_position == "U":
-        entities.add(word)
-      else:
-        if ent_position == "B":
-            e = word
-        elif ent_position == "I":
-            e += " " + word
-        elif ent_position == "L":
-            e += " " + word
-            entities.add(e)
-
-  return entities
 
 def get_cooccurences(doc, col, sp_model, ner_pred):
   c_sents = []
@@ -144,8 +122,7 @@ def filter_triples(triples):
 def extract_relations(doc, col, sp_model):
   ent_pairs = []
   for s in sp_model(doc).sents:
-    sent = s.text.strip()
-    sent = sp_model(sent)
+    sent = sp_model(s.text.strip())
 
     spans = list(sent.ents) + list(sent.noun_chunks)  # collect nodes
     spans = spacy.util.filter_spans(spans)
@@ -271,6 +248,7 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, function, *args):
 
   for t, docs in topics_to_docs.items():
     rels = [function(remove_stopwords(clean_text(coref_intros[d]), stopwords), topic_colouring[t], *args) for d in docs]
+    # rels = [function(clean_text(coref_intros[d]), topic_colouring[t], *args) for d in docs]
     df_data.append(itertools.chain(*rels))
 
   df_data = itertools.chain(*df_data)
@@ -300,3 +278,6 @@ def draw_kg(pairs, method, file_suffix, show_rels=True):
     labels = dict(zip(list(zip(pairs.subject, pairs.objects)),pairs['relation'].tolist()))
     nx.draw_networkx_edge_labels(k_graph, pos=layout, edge_labels=labels,font_color='black')
   plt.savefig('./out/kg-{0}-{1}'.format(method, file_suffix))
+
+
+  
