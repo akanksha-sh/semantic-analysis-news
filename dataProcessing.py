@@ -17,8 +17,7 @@ def clean_text(text):
   ctext = re.sub(r"\s+", " ", ctext)
   return ctext
 
-'TODO: Check how stopwords is being removed' 
-def get_entities(result, ignore_types= ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY']):
+def get_entities(result, ignore_types = ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY']):
   entities = set()
   for word, tag in zip(result["words"], result["tags"]):
     if tag == "O":
@@ -38,11 +37,9 @@ def get_entities(result, ignore_types= ['DATE', 'TIME', 'CARDINAL', 'PERCENT', '
           entities.add(e)
   return entities
 
-'TODO: Check how stopwords is being removed' 
-def remove_entities(ner_pred, sent, ignore_types=None):
+def remove_entities(ner_pred, sent, ignore_types):
   ents = get_entities(ner_pred.predict(sent), ignore_types)
-  print('set of ents:', len(ents))
-  'FIXME: Fix the regex pattern unbalanced parenthesis'
+  print(" entities:", ents)
   pattern = re.compile(r'\b(' + r'|'.join(ents) + r')\b\s*')
   text = pattern.sub(' ',sent)
   return text
@@ -60,5 +57,3 @@ def filter_lemmatise_tokens(tokens, stopwords):
 def get_filtered_tokens(doc, sp, updated_stopwords):
   filtered_tokens = [filter_lemmatise_tokens(sp(s.text.strip()), updated_stopwords) for s in sp(doc).sents]
   return list(chain(*filtered_tokens))
-
-

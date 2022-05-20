@@ -45,19 +45,19 @@ def topic_modelling(data_words, max_topics=10, min_topics=2):
 """Topic name inference"""
 def check_invalid(kw_doc, sp, stopwords, model=None, model_check=False, allowed_pos=['NOUN']):
   kw = list(sp(kw_doc))[0]
-  if model_check and kw.text not in model.vocab:
+  if model_check and kw.lemma_ not in model.vocab:
     return True 
-  # return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
+    # return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
   return kw.pos_ not in allowed_pos or kw.lemma_ in stopwords
   
 def get_topic_name(keywords, sp, embedding_model, stopwords): 
-  'FIXME: improve ways to get this'
   'TODO: Play around with different length of keywords '
   words = list(itertools.chain(*[kw.split('_') for kw in keywords]))
+  # print("words", words)
   fw = [w for w in words if not check_invalid(w,sp, stopwords, model=embedding_model, model_check=True)][:5]
+  # print("fw", fw)
   topic_names = embedding_model.most_similar_cosmul(positive=fw, topn=3)
   filtered_topic_names = [tn[0] for tn in topic_names if not check_invalid(tn[0], sp, stopwords)]
-
   return "TBD" if len(filtered_topic_names) == 0 else filtered_topic_names[0:3]
 
 """Sentiment analysis"""
@@ -78,6 +78,7 @@ def get_doc_sentiments(docs, sent_predictor, data):
 def get_topic_doc_mapping(cluster_id, doc_topics_dist, cluster_to_docs):
   cluster_docs = cluster_to_docs[cluster_id]
   topic_doc_mapping = {}
+  
   'TODO: Omit topics based on docs'
   # Get main topic in each document
   for i, row in enumerate(doc_topics_dist):
@@ -86,7 +87,7 @@ def get_topic_doc_mapping(cluster_id, doc_topics_dist, cluster_to_docs):
   
   return topic_doc_mapping
 
-def get_topic_dataframe(topic_doc_mapping, doc_sentiments, lda_model, sp, embedding_model, stopwords):
+def get_topic_data(cid, topic_doc_mapping, doc_sentiments, lda_model, sp, embedding_model, stopwords):
   topics_data = []
 
   for t, docs in topic_doc_mapping.items():
@@ -94,8 +95,7 @@ def get_topic_dataframe(topic_doc_mapping, doc_sentiments, lda_model, sp, embedd
       topic_name = get_topic_name(topic_keywords, sp, embedding_model, stopwords)
       avg_sent = np.mean(np.array([doc_sentiments[d] for d in docs]))
       topic_sentiment = get_sentiment(avg_sent)
-      topics_data.append([t, topic_name, topic_keywords, docs, topic_sentiment])
+      topics_data.append([cid, t, topic_name, topic_keywords, docs, topic_sentiment])
 
-  topics_df = pd.DataFrame(topics_data, columns = ['TopicId','Topic Name', 'Keywords', 'Docs', 'Sentiment'])
-  topics_df.set_index('TopicId', inplace=True)
-  return topics_df
+  return topics_data
+

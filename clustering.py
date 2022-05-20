@@ -32,7 +32,7 @@ def transform_data(X, dim):
 def visualise_clusters(X, k_labels, centroids, file_suffix):
   plt.scatter(X[:, 0], X[:, 1], c=k_labels, alpha=0.5, s=100)
   plt.scatter(centroids[:, 0], centroids[:, 1], marker='X', s=20, color='black') 
-  plt.savefig('{0}-clustering'.format(file_suffix))
+  plt.savefig('./out/{0}-clustering'.format(file_suffix))
 
 """ Word embedding"""
 def vectorize(list_of_docs, model):

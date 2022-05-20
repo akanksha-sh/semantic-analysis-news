@@ -7,9 +7,10 @@ import spacy
 import pandas as pd
 from itertools import islice
 from dataProcessing import clean_text, get_entities
-
+import json 
 
 """ Util functions"""
+
 def is_sublist(source, target):
     slen = len(source)
     return any(all(item1 == item2 for (item1, item2) in zip(source, islice(target, i, i+slen))) for i in range(len(target) - slen + 1))
@@ -37,26 +38,34 @@ def filter_triples(triples):
       continue
     lcs = long_substr_by_word([s,o])
     if (len(lcs)> 3):
-      print("before s:", s)
-      print("before o:", o)
-      print('lcs%s' % lcs)
+      # print("before s:", s)
+      # print("before o:", o)
+      # print('lcs%s' % lcs)
 
       o = o.replace(lcs, '').strip()
-      print("after:", o)
+      # print("after:", o)
 
     filtered_triples.append((s, r, o, tId, aId))
   return filtered_triples
 
 """ Get relations and draw visualisations """
 def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, function, *args):
+  topic_rels = []
   for tid, docs in topics_to_docs.items():
     rels = [function(remove_stopwords(clean_text(coref_intros[d]), stopwords), tid, d, *args) for d in docs]
     # rels = [function(clean_text(coref_intros[d]), topic_colouring[t], *args) for d in docs]
-    concatenated_rels = list(itertools.chain(*rels))
-    df_triples = pd.DataFrame(concatenated_rels, columns=['subject', 'relation', 'objects', 'topicId', 'articleId'])
-    df_triples.to_csv('{0}topic-{1}-triples.csv'.format(file_suffix, tid))
-    # relationExtraction.draw_kg(df_triples_m3, 'rel-m3', file_suffix, show_rels=True)
+    topic_rels.append(list(itertools.chain(*rels)))
 
+  concatenated_rels = list(itertools.chain(*topic_rels))
+  if len(concatenated_rels) > 0:
+    df_triples = pd.DataFrame(concatenated_rels, columns=['subject', 'relation', 'objects', 'topicId', 'articleId'])
+    df_triples.set_index('topicId', inplace=True)
+    df_triples.to_csv('./out/{0}-triples.csv'.format(file_suffix))
+
+    grouped_rels = df_triples.groupby(level=0).apply(lambda x: json.loads(x.to_json(orient='records'))).to_dict()
+    json.dump(grouped_rels, open("./out/json/{0}-rels.json".format(file_suffix), "w") , indent=2)
+
+    # relationExtraction.draw_kg(df_triples_m3, 'rel-m3', file_suffix, show_rels=True)
 
 """ Relation Extraction """
 
@@ -180,6 +189,7 @@ def extract_relations(doc, col, sp_model):
   return filtered_triples
 
 """ Method 3 """
+
 verb_patterns = [[{'POS':'AUX', 'OP': '?'}, {"POS":"VERB"}, {"POS":"ADP"}], 
           [{'POS': 'VERB', 'OP': '?'},
            {'POS': 'ADV', 'OP': '*'},
@@ -242,20 +252,13 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor):
     sent = sp_model(s.text.strip())
 
     verb_phrases = get_verb_phrases(sent, sp_model)
-    print("Verb phrases:", verb_phrases)
-    print(verb_phrases)
+    # print("Verb phrases:", verb_phrases)
+    # print(verb_phrases)
     if len(verb_phrases) == 0:
       continue
     # allowed = ['LAW', 'WORK_OF_ART', 'EVENT', 'PRODUCT', 'LOC', 'GPE', 'ORG', 'FAC' 'NORP', 'PERSON']
     ents = get_entities(ner_predictor.predict(sent.text.strip()), ignore_types= ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY'])
-    # ents = sent.ents
-    # # print("ner ents", ents)
-    # ents = set([e.text for e in sent.ents if e.label_ in allowed])
-    # print(set([(e.text, e.label_) for e in sent.ents if e.label_ in allowed]))
-    # if ents:
-    #   print("--------", ents[0])
-    # d =  [e.label for e in ents]
-    # print("types", d)
+
     noun_phrases = sent.noun_chunks
 
     verb_phrase = None
@@ -272,28 +275,7 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor):
   filtered_triples = filter_triples(triples)
 
   return filtered_triples
-
-
-
-# def get_data_triples(topics_to_docs, coref_intros, stopwords, function, *args):
-#   df_data = []
-#   colours= ['black', 'red', 'green', 'blue', 'yellow']
-#   topic_colouring = dict(zip(topics_to_docs.keys(), colours))
-
-#   for t, docs in topics_to_docs.items():
-#     rels = [function(remove_stopwords(clean_text(coref_intros[d]), stopwords), topic_colouring[t], *args) for d in docs]
-#     # rels = [function(clean_text(coref_intros[d]), topic_colouring[t], *args) for d in docs]
-#     df_data.append(itertools.chain(*rels))
-
-#   # df_data = itertools.chain(*df_data)
   
-#   if function.__name__ == "get_cooccurences":
-#     df_triples = pd.DataFrame(df_data, columns=['subject', 'objects', 'color'])
-#   else: 
-#     df_triples = pd.DataFrame(df_data, columns=['subject', 'relation', 'objects', 'color'])
-
-#   return df_triples
-
 # def draw_kg(pairs, method, file_suffix, show_rels=True):
 #   k_graph = nx.from_pandas_edgelist(pairs, 'subject', 'objects',create_using=nx.MultiDiGraph(), edge_attr='color')
 #   node_deg = nx.degree(k_graph)
