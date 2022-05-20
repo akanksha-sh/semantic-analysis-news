@@ -8,6 +8,7 @@ from multiprocessing import Pool, cpu_count
 import os
 import shutil
 import gensim.downloader as api
+import json 
 
 import numpy as np
 import spacy
@@ -146,7 +147,7 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
 
     """ LDA """
     min_no_topics = 2
-
+    topics_data = []
     for cid, docs in cluster_to_docs.items():
         cluster_tokens = [filtered_tokens[d] for d in docs]
         data_words = topicModelling.make_bigrams(cluster_tokens)
@@ -157,27 +158,33 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
             continue
         doc_topics_dist, lda_model = topicModelling.topic_modelling(data_words, max_no_topics, min_no_topics)
         topic_doc_mapping = topicModelling.get_topic_doc_mapping(cid, doc_topics_dist, cluster_to_docs)
-        topics_df = topicModelling.get_topic_dataframe(topic_doc_mapping, doc_sentiments, lda_model, sp, word_embedding_model, updated_stopwords)
-        topics_df.to_csv('{0}Cluster-{1}-topics.csv'.format(file_suffix, cid))
+        topics_data.append(topicModelling.get_topic_data(topic_doc_mapping, doc_sentiments, lda_model, sp, word_embedding_model, updated_stopwords))
 
-    # """NER Cooccurence"""
-    # all_rels_df = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.get_cooccurences, sp, ner_predictor)
-    # all_rels_df.to_csv('./out/coocc-{0}.csv'.format(file_suffix))
-    # relationExtraction.draw_kg(all_rels_df, 'coocc', file_suffix, show_rels=False)
+        # """NER Cooccurence"""
+        # all_rels_df = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.get_cooccurences, sp, ner_predictor)
+        # all_rels_df.to_csv('./out/coocc-{0}.csv'.format(file_suffix))
+        # relationExtraction.draw_kg(all_rels_df, 'coocc', file_suffix, show_rels=False)
 
-    # """Relation Extraction"""
+        # """Relation Extraction"""
 
-    # df_triples_m1 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.get_entity_triples, sp, ner_predictor)
-    # df_triples_m1.to_csv('./out/triples_m1-{0}.csv'.format(file_suffix))
-    # relationExtraction.draw_kg(df_triples_m1, 'rel_m1', file_suffix, show_rels=True)
+        # df_triples_m1 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.get_entity_triples, sp, ner_predictor)
+        # df_triples_m1.to_csv('./out/triples_m1-{0}.csv'.format(file_suffix))
+        # relationExtraction.draw_kg(df_triples_m1, 'rel_m1', file_suffix, show_rels=True)
 
-    # df_triples_m2 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.extract_relations, sp)
-    # df_triples_m2.to_csv('./out/triples_m2-{0}.csv'.format(file_suffix))
-    # relationExtraction.draw_kg(df_triples_m2, 'rel-m2', file_suffix, show_rels=True)
+        # df_triples_m2 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.extract_relations, sp)
+        # df_triples_m2.to_csv('./out/triples_m2-{0}.csv'.format(file_suffix))
+        # relationExtraction.draw_kg(df_triples_m2, 'rel-m2', file_suffix, show_rels=True)
 
-    # df_triples_m3 = relationExtraction.get_data_triples(topics_to_docs, coref_intros, stopwords_sp, relationExtraction.find_triplet, sp)
-    # df_triples_m3.to_csv('./out/triples_m3-{0}.csv'.format(file_suffix))
-    # relationExtraction.draw_kg(df_triples_m3, 'rel-m3', file_suffix, show_rels=True)
+        # df_triples_m3 = relationExtraction.get_data_triples(topic_doc_mapping, coref_intros, stopwords_sp, aug_file_suffix, relationExtraction.find_triplet, sp, ner_predictor)
+
+    joined_topics_data = list(itertools.chain(*topics_data))
+    topics_df = pd.DataFrame(joined_topics_data, columns = ['ClusterId', 'TopicId','Topic Name', 'Keywords', 'Articles', 'Sentiment'])
+    topics_df.set_index('ClusterId', inplace=True)
+    topics_df.to_csv('./out/{0}topics.csv'.format(file_suffix))
+
+    grouped_topics = topics_df.groupby(level=0).apply(lambda x: x.to_json(orient='records')).to_dict()
+    json.dump(grouped_topics, open("./out/json/{0}topics.json".format(file_suffix), "w") , indent=4)
+
 
 if __name__ == '__main__':
     cf, sp, wem, ner, sen = load_models()
