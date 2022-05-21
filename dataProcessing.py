@@ -2,12 +2,11 @@ from itertools import chain
 import pandas as pd
 import re
 
-def get_intros(articles, sp):
+def get_intros(titles, articles, sp):
   """Get first 5 sentences from each article """
-  intro_sents = [list(map(lambda x: x.text, sp(a).sents))[:5] for a in articles]
+  intro_sents = [[titles[i] + '.'] + list(map(lambda x: x.text, sp(a).sents))[:5] for i, a in enumerate(articles)]
   intros = list(map(' '.join, intro_sents))
   return intros
-'TODO: Add titles to intro'
 
 def clean_text(text):
   """Clean text by removing elipsis, dash between words"""

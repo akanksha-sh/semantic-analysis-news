@@ -84,7 +84,8 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
 
     """Load Data"""
     articles = input_group['article']
-    intros = dataProcessing.get_intros(articles, sp)
+    titles = input_group['title']
+    intros = dataProcessing.get_intros(titles, articles, sp)
     print("intros")
 
 
