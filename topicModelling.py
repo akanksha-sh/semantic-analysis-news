@@ -98,4 +98,3 @@ def get_topic_data(cid, topic_doc_mapping, doc_sentiments, lda_model, sp, embedd
       topics_data.append([cid, t, topic_name, topic_keywords, docs, topic_sentiment])
 
   return topics_data
-

@@ -275,7 +275,7 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor):
   filtered_triples = filter_triples(triples)
 
   return filtered_triples
-  
+
 # def draw_kg(pairs, method, file_suffix, show_rels=True):
 #   k_graph = nx.from_pandas_edgelist(pairs, 'subject', 'objects',create_using=nx.MultiDiGraph(), edge_attr='color')
 #   node_deg = nx.degree(k_graph)
@@ -294,6 +294,3 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor):
 #     labels = dict(zip(list(zip(pairs.subject, pairs.objects)),pairs['relation'].tolist()))
 #     nx.draw_networkx_edge_labels(k_graph, pos=layout, edge_labels=labels,font_color='black')
 #   plt.savefig('./out/kg-{0}-{1}'.format(method, file_suffix))
-
-
-  
