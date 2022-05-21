@@ -58,7 +58,7 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, funct
 
   concatenated_rels = list(itertools.chain(*topic_rels))
   if len(concatenated_rels) > 0:
-    df_triples = pd.DataFrame(concatenated_rels, columns=['subject', 'relation', 'objects', 'topicId', 'articleId'])
+    df_triples = pd.DataFrame(concatenated_rels, columns=['source', 'relation', 'target', 'topicId', 'articleId'])
     df_triples.set_index('topicId', inplace=True)
     df_triples.to_csv('./out/{0}-triples.csv'.format(file_suffix))
 
