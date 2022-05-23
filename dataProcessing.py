@@ -2,9 +2,9 @@ from itertools import chain
 import pandas as pd
 import re
 
-def get_intros(titles, articles, sp):
+def get_intros(titles, articles, sp, n =5):
   """Get first 5 sentences from each article """
-  intro_sents = [[titles[i] + '.'] + list(map(lambda x: x.text, sp(a).sents))[:5] for i, a in enumerate(articles)]
+  intro_sents = [[titles[i] + '.'] + list(map(lambda x: x.text, sp(a).sents))[:n] for i, a in enumerate(articles)]
   intros = list(map(' '.join, intro_sents))
   return intros
 
@@ -16,7 +16,7 @@ def clean_text(text):
   ctext = re.sub(r"\s+", " ", ctext)
   return ctext
 
-def get_entities(result, ignore_types = ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY']):
+def get_entities(result, ignore_types = []):
   entities = set()
   for word, tag in zip(result["words"], result["tags"]):
     if tag == "O":
@@ -25,7 +25,7 @@ def get_entities(result, ignore_types = ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 
     if ent_type in ignore_types:
       continue
     if ent_position == "U":
-      entities.add(word)
+      entities.add((word, ent_type))
     else:
       if ent_position == "B":
           e = word
@@ -33,12 +33,16 @@ def get_entities(result, ignore_types = ['DATE', 'TIME', 'CARDINAL', 'PERCENT', 
           e += " " + word
       elif ent_position == "L":
           e += " " + word
-          entities.add(e)
-  return entities
+          entities.add((e, ent_type))
 
-def remove_entities(ner_pred, sent, ignore_types):
-  ents = get_entities(ner_pred.predict(sent), ignore_types)
-  print(" entities:", ents)
+  'TODO: Remove types'
+  # print(" entities:", entities)
+  ents = [i[0] for i in entities]
+  return ents
+
+def remove_entities(ner_pred, sent):
+  ents = get_entities(ner_pred.predict(sent))
+  
   pattern = re.compile(r'\b(' + r'|'.join(ents) + r')\b\s*')
   text = pattern.sub(' ',sent)
   return text

@@ -51,7 +51,7 @@ def vectorize(list_of_docs, model):
         if vectors:
             vectors = np.asarray(vectors)
             avg_vec = vectors.mean(axis=0)
-            'TODO: use tfidf equivalent? ask maryam, check mean is coreect axis'
+            'TODO: use tfidf equivalent? Update document vector'
 
             features.append(avg_vec)
         else:

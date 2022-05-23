@@ -52,19 +52,14 @@ def load_models():
     sp = spacy.load("en_core_web_sm")
     print("spacy model loaded")
 
-    'TODO: Change to gigaword 300'
-    word_embedding_model = api.load('glove-wiki-gigaword-50')
+    word_embedding_model = api.load('glove-wiki-gigaword-300')
     print("word embedding model loaded")
-    # print(os.system('nvidia-smi'))
 
     sentiment_predictor = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/roberta-sentiment.tar.gz", cuda_device=torch.cuda.current_device())
     print("sentiment model loaded")
-    # print(os.system('nvidia-smi'))
 
     cf = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/coref-spanbert-large.tar.gz", cuda_device=torch.cuda.current_device())
     print("coref model loaded")
-    # print(os.system('nvidia-smi'))
-
     
     ner_predictor = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/fine-grained-ner.tar.gz", cuda_device=torch.cuda.current_device())
     print("ner model loaded")
@@ -85,7 +80,7 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
     """Load Data"""
     articles = input_group['article']
     titles = input_group['title']
-    intros = dataProcessing.get_intros(titles, articles, sp)
+    intros = dataProcessing.get_intros(titles, articles, sp, 8)
     print("intros")
 
 
@@ -96,8 +91,8 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
 
     """ Preprocessing """
     coref_intros_filt = [dataProcessing.clean_text(i) for i in coref_intros]
-    ignore_types = ['TIME', 'QUANTITY']
-    remove_entities_intros = [dataProcessing.remove_entities(ner_predictor, d, ignore_types) for d in coref_intros_filt]
+    # ignore_types = ['TIME', 'QUANTITY']
+    remove_entities_intros = [dataProcessing.remove_entities(ner_predictor, d) for d in coref_intros_filt]
 
 
     """ Tokenise and lemmatise """
@@ -178,7 +173,7 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
         # df_triples_m2.to_csv('./out/triples_m2-{0}.csv'.format(file_suffix))
         # relationExtraction.draw_kg(df_triples_m2, 'rel-m2', file_suffix, show_rels=True)
 
-        df_triples_m3 = relationExtraction.get_data_triples(topic_doc_mapping, coref_intros, stopwords_sp, aug_file_suffix, relationExtraction.find_triplet, sp, ner_predictor)
+        df_triples_m3 = relationExtraction.get_data_triples(topic_doc_mapping, coref_intros, updated_stopwords, aug_file_suffix, relationExtraction.find_triplet, sp, ner_predictor)
 
 
     joined_topics_data = list(itertools.chain(*topics_data))
