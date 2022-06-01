@@ -36,7 +36,6 @@ def get_entities(result, ignore_types = []):
           entities.add((e, ent_type))
 
   'TODO: Remove types'
-  # print(" entities:", entities)
   ents = [i[0] for i in entities]
   return ents
 

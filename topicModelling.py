@@ -18,14 +18,13 @@ def get_coherences(data_words, data_corpus, lda_dictionary, n_topics):
                                         chunksize=5, minimum_probability = 0.3,
                                         passes=20, alpha='asymmetric', per_word_topics=True)
   
-  # Note umass for now otherwise it breaks !!!!!!!
   coherence_model= CoherenceModel(model=lda_model, texts=data_words, dictionary=lda_dictionary, coherence='c_v', processes=1)
   coherence_lda = coherence_model.get_coherence()
 
   return (lda_model, coherence_lda)
 
 def topic_modelling(data_words, max_topics=10, min_topics=2):
-  lda_dictionary = corpora.Dictionary(data_words) #just using bigrams for now
+  lda_dictionary = corpora.Dictionary(data_words)
   # Term Document Frequency
   lda_corpus = [lda_dictionary.doc2bow(text) for text in data_words]
    # Create the TF-IDF model
@@ -47,18 +46,14 @@ def check_invalid(kw_doc, sp, stopwords, model=None, model_check=False, allowed_
   kw = list(sp(kw_doc))[0]
   if model_check and kw.lemma_ not in model.vocab:
     return True 
-    # return any([kw.pos_ not in allowed_pos or kw.text.find('air') != -1 for kw in doc])
   return kw.pos_ not in allowed_pos or kw.lemma_ in stopwords
   
 def get_topic_name(keywords, sp, embedding_model, stopwords): 
-  'TODO: Play around with different length of keywords '
   words = list(itertools.chain(*[kw.split('_') for kw in keywords]))
-  # print("words", words)
   fw = [w for w in words if not check_invalid(w,sp, stopwords, model=embedding_model, model_check=True)][:5]
-  # print("fw", fw)
-  topic_names = embedding_model.most_similar_cosmul(positive=fw, topn=3)
+  topic_names = embedding_model.most_similar_cosmul(positive=fw, topn=5)
   filtered_topic_names = [tn[0] for tn in topic_names if not check_invalid(tn[0], sp, stopwords)]
-  return "TBD" if len(filtered_topic_names) == 0 else filtered_topic_names[0:3]
+  return fw[0] if len(filtered_topic_names) == 0 else filtered_topic_names[0:3]
 
 """Sentiment analysis"""
 def get_sentiment(a):

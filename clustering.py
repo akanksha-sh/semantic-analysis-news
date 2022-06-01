@@ -4,7 +4,8 @@ from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import numpy as np
-
+import gensim.corpora as corpora
+from gensim.models import TfidfModel
 
 """ K-Means Clustering """
 def clustering_k_means(X, n_clusters): 
@@ -21,7 +22,7 @@ def optimal_cluster_number_kmeans(X):
   results = [clustering_k_means(X, i) for i in range(2, n)]
   (l,c,s) = max(results,key=lambda item:item[2])
   print(s)
-  return l, c, len(c)
+  return l, c, len(c), s
 
 """Transform the data"""
 def transform_data(X, dim):
@@ -32,7 +33,7 @@ def transform_data(X, dim):
 def visualise_clusters(X, k_labels, centroids, file_suffix):
   plt.scatter(X[:, 0], X[:, 1], c=k_labels, alpha=0.5, s=100)
   plt.scatter(centroids[:, 0], centroids[:, 1], marker='X', s=20, color='black') 
-  plt.savefig('./out/{0}-clustering'.format(file_suffix))
+  plt.savefig('./out/{0}/clustering'.format(file_suffix))
 
 """ Word embedding"""
 def vectorize(list_of_docs, model):
@@ -57,6 +58,29 @@ def vectorize(list_of_docs, model):
         else:
             features.append(zero_vector)
     return features
+
+def vectorize_tfidf(filtered_tokens, model):
+  cluster_dict = corpora.Dictionary(filtered_tokens)
+  cluster_corpus = [cluster_dict.doc2bow(text) for text in filtered_tokens]
+  cluster_tfidf = TfidfModel(cluster_corpus)
+  features = []
+  vector_size = len(model['flight'])
+
+  for tokens in cluster_tfidf[cluster_corpus]:
+    zero_vector = np.zeros(vector_size)
+    vectors = []
+    for token, weight in tokens:
+        try:
+            vectors.append(model[cluster_dict[token]]* weight)
+        except KeyError:
+            continue
+    if vectors:
+        vectors = np.asarray(vectors)
+        avg_vec = vectors.mean(axis=0)
+        features.append(avg_vec)
+    else:
+        features.append(zero_vector)
+  return features
 
 def n_most_representative_for_cluster(n, t_data, cluster_id, groups, centroids, min_docs):
     group_indices = np.array(groups.get_group(cluster_id).index.tolist())

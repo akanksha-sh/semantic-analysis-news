@@ -8,6 +8,7 @@ import pandas as pd
 from itertools import islice
 from dataProcessing import clean_text, get_entities
 import json 
+from topicModelling import get_sentiment 
 
 """ Util functions"""
 
@@ -31,21 +32,22 @@ def remove_stopwords(text, stopwords):
   c = re.sub(r"\s+", " ", c)
   return c
 
-def filter_triples(triples):
+def filter_triples(triples, sentiment_predictor):
   filtered_triples = []
   for (s, r, o, tId, aId) in triples:
-    if not all((s, r, o)) or s == o or any(r.strip().find(i) != -1 for i in ["told", "said", "saying", "tell", "say"]):
+    if not all((s, r, o)) or s == o or any(r.strip().find(i) != -1 for i in ["told", "said", "saying", "tell", "says", "saying", "say"]):
       continue
-    lcs = long_substr_by_word([s,o])
-    if (len(lcs)> 3):
-      # print("before s:", s)
-      # print("before o:", o)
-      # print('lcs%s' % lcs)
-
-      o = o.replace(lcs, '').strip()
-      # print("after:", o)
-
-    filtered_triples.append((s, r, o, tId, aId))
+    lcs = long_substr_by_word([r,o])
+    lcs2 = long_substr_by_word([s,o])
+    o = o.replace(lcs, '').strip()
+    o = o.replace(lcs2, '').strip()
+    if o == '': 
+      print("empty object")
+      continue
+    """Get triple sentiment"""
+    triple = ' '.join([s, r, o])
+    sent = get_sentiment(int(sentiment_predictor.predict(triple)['label']))
+    filtered_triples.append((s, r, o, tId, aId, sent))
   return filtered_triples
 
 """ Get relations and draw visualisations """
@@ -53,17 +55,16 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, funct
   topic_rels = []
   for tid, docs in topics_to_docs.items():
     rels = [function(remove_stopwords(clean_text(coref_intros[d]), stopwords), tid, d, *args) for d in docs]
-    # rels = [function(clean_text(coref_intros[d]), topic_colouring[t], *args) for d in docs]
     topic_rels.append(list(itertools.chain(*rels)))
 
   concatenated_rels = list(itertools.chain(*topic_rels))
   if len(concatenated_rels) > 0:
-    df_triples = pd.DataFrame(concatenated_rels, columns=['source', 'relation', 'target', 'topicId', 'articleId'])
+    df_triples = pd.DataFrame(concatenated_rels, columns=['source', 'relation', 'target', 'topicId', 'articleId', 'sentiment'])
     df_triples.set_index('topicId', inplace=True)
     df_triples.to_csv('./out/{0}-triples.csv'.format(file_suffix))
 
     grouped_rels = df_triples.groupby(level=0).apply(lambda x: json.loads(x.to_json(orient='records'))).to_dict()
-    json.dump(grouped_rels, open("./out/json/{0}-rels.json".format(file_suffix), "w") , indent=2)
+    json.dump(grouped_rels, open("./data/json/{0}-rels.json".format(file_suffix), "w") , indent=2)
 
     # relationExtraction.draw_kg(df_triples_m3, 'rel-m3', file_suffix, show_rels=True)
 
@@ -74,7 +75,8 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, funct
 verb_patterns = [[{'POS':'AUX', 'OP': '?'}, {"POS":"VERB"}, {"POS":"ADP"}], 
           [{'POS': 'VERB', 'OP': '?'},
            {'POS': 'ADV', 'OP': '*'},
-           {'POS': 'VERB', 'OP': '+'}], 
+           {'POS': 'VERB', 'OP': '+'}],
+           [{'POS': 'VERB', 'OP': '+'}] ,
            [{'POS': 'AUX', 'OP': '?'},{'POS': 'PART', 'OP': '?'},{'POS': 'VERB', 'OP': '+'}]
           ]
 
@@ -105,50 +107,57 @@ def get_verb_phrases(doc, sp_model):
             new_vps.append(verb_phrase)
     return new_vps
 
-def longer_verb_phrase(verb_phrases):
-    longest_length = 0
-    longest_verb_phrase = None
-    for verb_phrase in verb_phrases:
-        if len(verb_phrase) > longest_length:
-            longest_verb_phrase = verb_phrase
-    return longest_verb_phrase
+def get_subject_relation(verb_phrase, noun_phrases, ents):
+  print("VERB", verb_phrase, verb_phrase.start)
+  print("ENTS", ents)
+  subject = None
+  relation = None
+  for n in noun_phrases:
+    if n.start < verb_phrase.start:
+      print("N", n, n.start)
+      valid_ents = [(i,n.text.find(i)) for i in ents if n.text.find(i) != -1]
+      print("VALID ENTS", valid_ents)
+      if len(valid_ents) == 0:
+        print("NO ENTS")
+        continue
+      valid_ents.sort(key=lambda tup: tup[1])
+      subject = valid_ents[0][0]
+      print("SE", subject)
+      relation = n.text.partition(subject)[2].strip() + ' ' + verb_phrase.text
+      print("rel", relation)
+      break
+  return subject, relation
 
-def find_noun_phrase(verb_phrase, noun_phrases, side, ents):
-    for noun_phrase in noun_phrases:
-        # print(any([noun_phrase.text.find(i) != -1 for i in ents]))
-
-        if (side == "left" and \
-            noun_phrase.start < verb_phrase.start) and any([noun_phrase.text.find(i) != -1 for i in ents]):
-            return noun_phrase.text.strip()
-        elif (side == "right" and \
-              noun_phrase.start > verb_phrase.start):
-            return noun_phrase.text.strip()
+def find_object_phrase(verb_phrase, noun_phrases):
+  for noun_phrase in noun_phrases:        
+    if noun_phrase.start > verb_phrase.start:
+        return noun_phrase.text.strip()
   
-def find_triplet(doc, tId, aId, sp_model, ner_predictor):
+def find_triplet(doc, tId, aId, sp_model, ner_predictor, sentiment_predictor):
   triples = []
   for s in sp_model(doc).sents:
     sent = sp_model(s.text.strip())
+    print("sent: ", sent)
     verb_phrases = get_verb_phrases(sent, sp_model)
 
     if len(verb_phrases) == 0:
       continue
-    ignore_types = ['DATE', 'TIME', 'CARDINAL', 'MONEY', 'PERCENT', 'QUANTITY']
-    ents = get_entities(ner_predictor.predict(sent.text.strip()), ignore_types= ignore_types)
+    
+    """Get longest verb phrase"""
+    verb_phrases.sort(key=len, reverse=True)
+    verb_phrase = verb_phrases[0]
 
-    noun_phrases = sent.noun_chunks
-
-    verb_phrase = None
-    if (len(verb_phrases) > 1):
-        verb_phrase = longer_verb_phrase(list(verb_phrases))
-    else:
-        verb_phrase = verb_phrases[0]
-
-    left_noun_phrase = find_noun_phrase(verb_phrase, noun_phrases, "left", ents)
-    right_noun_phrase = find_noun_phrase(verb_phrase, noun_phrases, "right", [])
+    ents = get_entities(ner_predictor.predict(sent.text.strip()), ignore_types= ['DATE', 'MONEY', 'TIME', 'CARDINAL', 'PERCENT', 'QUANTITY'])
+    noun_phrases = list(sent.noun_chunks)
+    if len(ents) ==0 or len(noun_phrases)==0:
+      continue
+    subject_phrase, relation = get_subject_relation(verb_phrase, noun_phrases, ents)
+    print("result", subject_phrase, relation)
+    object_phrase = find_object_phrase(verb_phrase, noun_phrases)
   
-    triples.append((left_noun_phrase, verb_phrase.text, right_noun_phrase, tId, aId))
+    triples.append((subject_phrase, relation, object_phrase, tId, aId))
 
-  filtered_triples = filter_triples(triples)
+  filtered_triples = filter_triples(triples, sentiment_predictor)
 
   return filtered_triples
 
