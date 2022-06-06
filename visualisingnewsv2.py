@@ -37,9 +37,11 @@ def dataloader():
 
     data['category'] = data['category'].fillna("Misc")
     data_groups = data.groupby([data.date.dt.year, 'category'])
-    # print(data_groups['category'].value_counts())
-    mean_count = floor(data_groups['category'].value_counts().mean())
-    filtered_data_groups = [data_groups.get_group(x) for x in data_groups.groups if len(data_groups.get_group(x)) > mean_count]
+    
+    mean_count = data_groups['category'].value_counts().mean()
+    std_count = data_groups['category'].value_counts().std()
+    threshold = floor(abs(std_count- mean_count))
+    filtered_data_groups = [data_groups.get_group(x) for x in data_groups.groups if len(data_groups.get_group(x)) > threshold]
 
     for dg in filtered_data_groups:
         dg.reset_index(drop=True, inplace=True)
