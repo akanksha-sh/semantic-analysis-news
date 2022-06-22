@@ -33,7 +33,6 @@ def topic_modelling(data_words, max_topics=10, min_topics=2):
 
   n_topics_coherence = [get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(min_topics, max_topics)]
   models, coherences = list(zip(*n_topics_coherence))
-  print(coherences)
   i = np.argmax(np.array([coherences]))
   lda_model = models[i]
   print("Optimal number of topics", i+min_topics)

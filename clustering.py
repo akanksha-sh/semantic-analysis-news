@@ -16,12 +16,10 @@ def clustering_k_means(X, n_clusters):
 
 def optimal_cluster_number_kmeans(X):
   (n_d, n_v) = X.shape
-  # alt1: n/root n, alt 2: n//3 
   n = int(n_d * n_v / sqrt(n_d))
-  print(n_d, n_v, n)
+  print("len:", n_d, "max_clusters:", n)
   results = [clustering_k_means(X, i) for i in range(2, n)]
   (l,c,s) = max(results,key=lambda item:item[2])
-  print(s)
   return l, c, len(c), s
 
 """Transform the data"""
@@ -52,8 +50,6 @@ def vectorize(list_of_docs, model):
         if vectors:
             vectors = np.asarray(vectors)
             avg_vec = vectors.mean(axis=0)
-            'TODO: use tfidf equivalent? Update document vector'
-
             features.append(avg_vec)
         else:
             features.append(zero_vector)
@@ -82,6 +78,32 @@ def vectorize_tfidf(filtered_tokens, model):
         features.append(zero_vector)
   return features
 
+def vectorize_most_rep(filtered_tokens, model):
+  cluster_dict = corpora.Dictionary(filtered_tokens)
+  cluster_corpus = [cluster_dict.doc2bow(text) for text in filtered_tokens]
+  cluster_tfidf = TfidfModel(cluster_corpus)
+  features = []
+  vector_size = len(model['flight'])
+
+  for tokens in cluster_tfidf[cluster_corpus]:
+    tokens.sort(key=lambda x:x[1], reverse=True)
+
+    zero_vector = np.zeros(vector_size)
+    vectors = []
+    for token, weight in tokens[:10]:
+        try:
+            vectors.append(model[cluster_dict[token]]* weight)
+        except KeyError:
+            continue
+    if vectors:
+        vectors = np.asarray(vectors)
+        avg_vec = vectors.mean(axis=0)
+        features.append(avg_vec)
+    else:
+        features.append(zero_vector)
+  return features
+
+
 def n_most_representative_for_cluster(n, t_data, cluster_id, groups, centroids, min_docs):
     group_indices = np.array(groups.get_group(cluster_id).index.tolist())
 
@@ -96,15 +118,12 @@ def n_most_representative_for_cluster(n, t_data, cluster_id, groups, centroids, 
 
 def get_n_param(cluster_member_counts):
   n_std = cluster_member_counts.std()
-  print("std:", n_std)
   n_mean = cluster_member_counts.mean()
-  print("mean:", n_mean)
   return floor(n_mean - n_std), ceil(n_mean + n_std)
 
 def get_cluster_docs(cluster_member_counts, opt_cluster_no, intro_groups, transformed_data, k_centroids):
   """Get n parameter"""
   n_min, n_max = get_n_param(cluster_member_counts)
-  print("Min:", n_min, "Max:", n_max)
 
   cluster_to_docs = {} 
   for cid in range(opt_cluster_no):

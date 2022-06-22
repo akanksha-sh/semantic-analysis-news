@@ -8,12 +8,14 @@ def get_intros(titles, articles, sp, n =5):
   intros = list(map(' '.join, intro_sents))
   return intros
 
-def clean_text(text):
-  """Clean text by removing elipsis, dash between words"""
+def clean_text(text, unwanted_phrases={"Read More", "Source"}):
+  """Clean text by removing elipsis, dash between words, unwanted characters and phrases"""
   ctext = re.sub(r"…", "", text)
   ctext = re.sub(r"(?<=\w)-(?=\w)| --", " ", ctext)
-  ctext = re.sub(r'[@#^&*)(|/><}{]', ' ', ctext) 
+  ctext = re.sub(r'[@#^&*)(:|/><}{]', ' ', ctext) 
   ctext = re.sub(r"\s+", " ", ctext)
+  pattern = re.compile(r'\b(' + r'|'.join(unwanted_phrases) + r')\b\s*')
+  ctext = pattern.sub(' ', ctext)
   return ctext
 
 def get_entities(result, ignore_types = []):
