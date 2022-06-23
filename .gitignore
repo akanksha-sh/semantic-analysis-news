@@ -11,7 +11,8 @@ models/
 out/
 out_old/
 data/
-
+*.png 
+*.pickle
 # Distribution / packaging
 .Python
 build/
