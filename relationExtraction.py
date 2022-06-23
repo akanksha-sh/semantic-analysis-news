@@ -1,9 +1,6 @@
 import re
-import matplotlib.pyplot as plt
-import networkx as nx
 from spacy.matcher import Matcher 
 import itertools
-import spacy
 import pandas as pd
 from itertools import islice
 from dataProcessing import clean_text, get_entities
@@ -34,22 +31,25 @@ def remove_stopwords(text, stopwords):
 
 def filter_triples(triples, sentiment_predictor):
   filtered_triples = []
+  # Commonly extracted from news articles but result in unmeaningful relations
+  unwanted_relations = ["told", "said", "saying", "tell", "says", "saying", "say"]
+
   for (s, r, o, tId, aId) in triples:
-    if not all((s, r, o)) or s == o or any(r.strip().find(i) != -1 for i in ["told", "said", "saying", "tell", "says", "saying", "say"]):
+    if not all((s, r, o)) or s == o or any(r.strip().find(i) != -1 for i in unwanted_relations):
       continue
+    # Remove redunancy in triples 
     lcs = long_substr_by_word([r,o])
     lcs2 = long_substr_by_word([s,o])
     o = o.replace(lcs, '').strip()
     o = o.replace(lcs2, '').strip()
     if o == '': 
       continue
-    """Get triple sentiment"""
+    # Get triple sentiment
     triple = ' '.join([s, r, o])
     sent = get_sentiment(int(sentiment_predictor.predict(triple)['label']))
     filtered_triples.append((s, r.strip(), o, tId, aId, sent))
   return filtered_triples
 
-""" Get relations and draw visualisations """
 def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, function, *args):
   topic_rels = []
   for tid, docs in topics_to_docs.items():
@@ -57,6 +57,7 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, funct
     topic_rels.append(list(itertools.chain(*rels)))
 
   concatenated_rels = list(itertools.chain(*topic_rels))
+
   if len(concatenated_rels) > 0:
     df_triples = pd.DataFrame(concatenated_rels, columns=['source', 'relation', 'target', 'topicId', 'articleId', 'sentiment'])
     df_triples.set_index('topicId', inplace=True)
@@ -65,11 +66,8 @@ def get_data_triples(topics_to_docs, coref_intros, stopwords, file_suffix, funct
     grouped_rels = df_triples.groupby(level=0).apply(lambda x: json.loads(x.to_json(orient='records'))).to_dict()
     json.dump(grouped_rels, open("./data/json/{0}-rels.json".format(file_suffix), "w") , indent=2)
 
-    # relationExtraction.draw_kg(df_triples_m3, 'rel-m3', file_suffix, show_rels=True)
+""" Relation Extraction: Final method """
 
-""" Relation Extraction """
-
-""" Method 3 """
 verb_patterns = [[{'POS':'AUX','OP':'?'}, {'POS': 'PART', 'OP': '?'}, {'POS':'VERB','OP': '+'}, {'POS':'ADP', 'OP': '+'}], 
           [{'POS': 'VERB', 'OP': '?'}, {'POS': 'ADV', 'OP': '*'}, {'POS': 'VERB', 'OP': '+'}]]
 
@@ -93,9 +91,11 @@ def get_verb_phrases(doc, sp_model):
     matcher = Matcher(sp_model.vocab) 
     matcher.add("verb-phrases", verb_patterns)
     matches = matcher(doc)
+    # Get the substrings based on the position of Spans
     verb_phrases = [doc[start:end] for _, start, end in matches] 
     new_vps = []
     for verb_phrase in verb_phrases:
+      # Verb phrase only qualifies if it contains root
         if (contains_root(verb_phrase, root)):
             new_vps.append(verb_phrase)
     return new_vps
@@ -104,19 +104,23 @@ def get_subject_relation(verb_phrase, noun_phrases, ents):
   subject = None
   relation = None
   for n in noun_phrases:
+    # Subject phrase must occur to the left of the root verb phrase
     if n.start < verb_phrase.start:
       valid_ents = [(i,n.text.find(i)) for i in ents if n.text.find(i) != -1]
 
       if len(valid_ents) == 0:
         continue
       valid_ents.sort(key=lambda tup: tup[1])
+      # Gets the first occuring named entity in the sentence
       subject = valid_ents[0][0]
+      # Predicate/Relation Augmentation
       relation = n.text.partition(subject)[2].strip() + ' ' + verb_phrase.text
       break
   return subject, relation
 
 def find_object_phrase(verb_phrase, noun_phrases):
   for noun_phrase in noun_phrases:        
+    # Object phrase must occur to the right of the root verb phrase
     if noun_phrase.start > verb_phrase.start:
         return noun_phrase.text.strip()
   
@@ -125,11 +129,9 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor, sentiment_predictor):
   for s in sp_model(doc).sents:
     sent = sp_model(s.text.strip())
     verb_phrases = get_verb_phrases(sent, sp_model)
-
     if len(verb_phrases) == 0:
       continue
-    
-    """Get longest verb phrase"""
+    # Get longest verb phrase
     verb_phrases.sort(key=len, reverse=True)
     verb_phrase = verb_phrases[0]
 
@@ -144,22 +146,3 @@ def find_triplet(doc, tId, aId, sp_model, ner_predictor, sentiment_predictor):
   filtered_triples = filter_triples(triples, sentiment_predictor)
 
   return filtered_triples
-
-# def draw_kg(pairs, method, file_suffix, show_rels=True):
-#   k_graph = nx.from_pandas_edgelist(pairs, 'subject', 'objects',create_using=nx.MultiDiGraph(), edge_attr='color')
-#   node_deg = nx.degree(k_graph)
-#   layout = nx.spring_layout(k_graph, k=1, iterations=60)
-#   plt.figure(figsize=(35,30))
-#   nx.draw_networkx(
-#       k_graph,
-#       node_size=[int(deg[1]) * 1000 for deg in node_deg],
-#       linewidths=1.5,
-#       pos=layout,
-#       edge_color=nx.get_edge_attributes(k_graph,'color').values(),
-#       edgecolors='black',
-#       node_color='white',
-#       )
-#   if show_rels:
-#     labels = dict(zip(list(zip(pairs.subject, pairs.objects)),pairs['relation'].tolist()))
-#     nx.draw_networkx_edge_labels(k_graph, pos=layout, edge_labels=labels,font_color='black')
-#   plt.savefig('./out/kg-{0}-{1}'.format(method, file_suffix))

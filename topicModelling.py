@@ -25,14 +25,15 @@ def get_coherences(data_words, data_corpus, lda_dictionary, n_topics):
 
 def topic_modelling(data_words, max_topics=10, min_topics=2):
   lda_dictionary = corpora.Dictionary(data_words)
-  # Term Document Frequency
+  # Term Document Frequency (BOW)
   lda_corpus = [lda_dictionary.doc2bow(text) for text in data_words]
-   # Create the TF-IDF model
+  # Create the TF-IDF model
   lda_tfidf = TfidfModel(lda_corpus)
   corpus_tfidf = lda_tfidf[lda_corpus]
 
   n_topics_coherence = [get_coherences(data_words, corpus_tfidf, lda_dictionary, n) for n in range(min_topics, max_topics)]
   models, coherences = list(zip(*n_topics_coherence))
+  # Pick the n_topics that results in the highest silhouette score
   i = np.argmax(np.array([coherences]))
   lda_model = models[i]
   print("Optimal number of topics", i+min_topics)
@@ -48,6 +49,7 @@ def check_invalid(kw_doc, sp, stopwords, model=None, model_check=False, allowed_
   return kw.pos_ not in allowed_pos or kw.lemma_ in stopwords
   
 def get_topic_name(keywords, sp, embedding_model, stopwords): 
+  # To split bigrams into keywords 
   words = list(itertools.chain(*[kw.split('_') for kw in keywords]))
   fw = [w for w in words if not check_invalid(w,sp, stopwords, model=embedding_model, model_check=True)][:5]
   topic_names = embedding_model.most_similar_cosmul(positive=fw, topn=5)
@@ -72,8 +74,6 @@ def get_doc_sentiments(docs, sent_predictor, data):
 def get_topic_doc_mapping(cluster_id, doc_topics_dist, cluster_to_docs):
   cluster_docs = cluster_to_docs[cluster_id]
   topic_doc_mapping = {}
-  
-  'TODO: Omit topics based on docs'
   # Get main topic in each document
   for i, row in enumerate(doc_topics_dist):
       t = sorted(row[0], key=lambda x: (x[1]), reverse=True)[0][0]
@@ -83,7 +83,6 @@ def get_topic_doc_mapping(cluster_id, doc_topics_dist, cluster_to_docs):
 
 def get_topic_data(cid, topic_doc_mapping, doc_sentiments, lda_model, sp, embedding_model, stopwords):
   topics_data = []
-
   for t, docs in topic_doc_mapping.items():
       topic_keywords = [w for w, _ in lda_model.show_topic(t)]
       topic_name = get_topic_name(topic_keywords, sp, embedding_model, stopwords)
