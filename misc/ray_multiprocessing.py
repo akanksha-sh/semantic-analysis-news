@@ -1,70 +1,69 @@
-""" Imports """
+
 from functools import partial
+import ray
+from allennlp.predictors.predictor import Predictor
+from ray.util.multiprocessing import Pool
 import itertools
-from math import ceil, floor
+from math import floor
+from multiprocessing import cpu_count
 import os
 import shutil
 import gensim.downloader as api
-import time
+
 import numpy as np
 import spacy
 from allennlp.predictors.predictor import Predictor
 from sklearn.preprocessing import normalize
-import torch
+
 import dataProcessing
 import relationExtraction
 import topicModelling
 import clustering
 import pandas as pd
-import dill
-import json
-import utils
 
-"""Load Data"""
+def load_models():
+    cf = Predictor.from_path("./models/coref-spanbert-large.tar.gz")
+    print("coref model loaded")
+    cf_id = ray.put(cf)
+
+    sp = spacy.load("en_core_web_sm")
+    print("spacy model loaded")
+    sp_id = ray.put(sp)
+
+    word_embedding_model = api.load('glove-wiki-gigaword-50')
+    print("word embedding model loaded")
+    glove_id = ray.put(word_embedding_model)
+
+    ner_predictor = Predictor.from_path("./models/fine-grained-ner.tar.gz")
+    print("ner model loaded")
+    ner_id = ray.put(ner_predictor)
+
+    sentiment_predictor = Predictor.from_path("./models/roberta-sentiment.tar.gz")
+    print("sentiment model loaded")
+    sent_id = ray.put(sentiment_predictor)
+
+    return cf_id, sp_id, glove_id, ner_id, sent_id
+
 def dataloader():
-    paths  = ['./out/', './data', './data/json']
-    for path in paths:
-        shutil.rmtree(path, ignore_errors=True)
-        os.makedirs(path)
+    output_path = './out/'
+    shutil.rmtree(output_path, ignore_errors=True)
+    os.makedirs(output_path)
 
     data = pd.read_csv('airline.csv', parse_dates=[1])
     data.columns = ['url', 'date', 'title', 'author', 'category', 'article']
     data['date'] = data['date'].dt.normalize()
 
-    data['category'] = data['category'].fillna("Misc")
-    data_groups = data.groupby([data.date.dt.year, 'category'])
-    
-    mean_count = data_groups['category'].value_counts().mean()
-    std_count = data_groups['category'].value_counts().std()
-    threshold = floor(abs(std_count- mean_count))
-    filtered_data_groups = [data_groups.get_group(x) for x in data_groups.groups if len(data_groups.get_group(x)) > threshold]
-
-    for dg in filtered_data_groups:
+    counts = data['category'].value_counts()
+    mean_count = floor(counts.mean())
+    filtered_data= data[data['category'].groupby(data['category']).transform('size') > mean_count]
+    c = filtered_data.groupby([filtered_data.date.dt.year, 'category'])
+    data_groups = [c.get_group(x) for x in c.groups]
+    for dg in data_groups:
         dg.reset_index(drop=True, inplace=True)
-    return filtered_data_groups
+    return data_groups
 
-""" Load Models """
-def load_models():
-    sp = spacy.load("en_core_web_sm")
-    print("spacy model loaded")
-
-    word_embedding_model = api.load('glove-wiki-gigaword-300')
-    print("word embedding model loaded")
-
-    sentiment_predictor = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/roberta-sentiment.tar.gz", cuda_device=torch.cuda.current_device())
-    print("sentiment model loaded")
-
-    cf = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/coref-spanbert-large.tar.gz", cuda_device=torch.cuda.current_device())
-    print("coref model loaded")
-    
-    ner_predictor = Predictor.from_path("/vol/bitbucket/as16418/tempFolder/models/fine-grained-ner.tar.gz", cuda_device=torch.cuda.current_device())
-    print("ner model loaded")
-    
-    return cf, sp, word_embedding_model, ner_predictor, sentiment_predictor
-
-
-def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_group): 
-    ner_predictor = dill.loads(pickled_ner)
+@ray.remote
+def run(cf, sp, word_embedding_model, ner_predictor, sentiment_predictor, input_group): 
     file_suffix = '{0}-{1}'.format(input_group.category[0], input_group.date[0].year)
     os.makedirs('./out/{0}/'.format(file_suffix))
     os.makedirs('./data/json/{0}/'.format(file_suffix))
@@ -150,12 +149,15 @@ def run(cf, sp, word_embedding_model, pickled_ner, sentiment_predictor, input_gr
     utils.save_topics(input_group.category[0], input_group.date[0].year, file_suffix, topics_df)
 
 if __name__ == '__main__':
-    torch.cuda.empty_cache()
-    cf, sp, wem, ner, sen = load_models()
-    pickled_ner = dill.dumps(ner, byref=True)
+    ray.init()
+    cf_id, sp_id, glove_id, ner_id, sent_id = load_models()
     data_groups = dataloader()
-    for dg in data_groups:
-        start = time.time()
-        run(cf, sp, wem, pickled_ner, sen, dg)
-        print("Time to run one group", time.time() - start)
-    utils.getCombinedData()
+    print(len(data_groups))
+    # Store the array in the shared memory object store once
+    result_ids = [run.remote(cf_id, sp_id, glove_id, ner_id, sent_id, i) for i in data_groups[:2]]
+    output = ray.get(result_ids)
+    print("Output", output)
+
+    # pool = Pool(processes=(cpu_count() - 1))
+    # pool.map(partial(run, cf, sp, wem, pickled_ner, sen), data_groups)
+    # pool.close()

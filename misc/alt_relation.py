@@ -1,3 +1,5 @@
+# Obsolete apporaches
+
 """ Method 1 - entity triples"""
 def get_cooccurences(doc, col, sp_model, ner_pred):
   c_sents = []
@@ -5,7 +7,7 @@ def get_cooccurences(doc, col, sp_model, ner_pred):
     if len(s) < 3:
       continue
     ents = list(get_entities(ner_pred.predict(sentence=s.text.strip())))
-    # get permuatations instead?
+    # get permuatations instead
     if len(ents) != 2:
       continue
     c_sents.append((ents[0], ents[1], col))
@@ -45,7 +47,6 @@ def get_entity_triples(doc, col, sp_model, ner_pred):
   return triples
 
 """ Method 2 """
-
 def refine_ent(ent, sent, sp_model):
   unwanted_tokens = (
       'PRON',  # pronouns
@@ -82,13 +83,7 @@ def extract_relations(doc, col, sp_model):
     with sent.retokenize() as retokenizer:
         [retokenizer.merge(span, attrs={'tag': span.root.tag,
                                         'dep': span.root.dep}) for span in spans]
-          
-          
-    # deps = [token.dep_ for token in sent]
-    # cond =  (deps.count('obj') + deps.count('dobj')) != 1\
-    #             or (deps.count('subj') + deps.count('nsubj')) != 1
-    # if cond:
-    #         continue
+
 
     for token in sent:
       if token.dep_ not in ('obj', 'dobj'):  # identify object nodes
