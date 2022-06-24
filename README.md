@@ -86,7 +86,7 @@ Clone this repository in the virtual environment.
 
 
 ```
-git clone https://github.com/akanksha-sh/visualisingNews.git
+git clone https://github.com/akanksha-sh/semantic-analysis-news.git
 ```
 
 ## Usage
@@ -121,6 +121,7 @@ In order to display the results of this semantic analysis engine, this repositor
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
-## License 
+## License
+Copyright &#169; 2022 Akanksha Sharma
 
 Licensed under the MIT license. 
