@@ -7,5 +7,5 @@ source /vol/bitbucket/as16418/myvenv/bin/activate
 #source /vol/cuda/11.0.3-cudnn8.0.5.39/setup.sh
 TERM=vt100 # or TERM=xterm
 /usr/bin/nvidia-smi
-python3 visualisingnewsv2.py
+python3 src/visualisingnewsv2.py
 uptime

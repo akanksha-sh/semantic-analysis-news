@@ -27,7 +27,7 @@ def dataloader():
         shutil.rmtree(path, ignore_errors=True)
         os.makedirs(path)
 
-    data = pd.read_csv("airline.csv", parse_dates=[1])
+    data = pd.read_csv("/vol/bitbucket/as16418/tempFolder/dataset/airline.csv", parse_dates=[1])
     data.columns = ["url", "date", "title", "author", "category", "article"]
     data["date"] = data["date"].dt.normalize()
 
